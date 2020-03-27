@@ -61,7 +61,8 @@ class Cantor(nn.Module):
                 # set 'bit' value to 0 if a preceding decimal place was a 1
                 left = left * mask
 
-                # set mask used above if the current decimal place is a 1
+                # if the current decimal place is a 1, set mask value to 0 to be used in future iterations
+                # to convert 1's and 2's to 0's by multiplying by zero
                 lones = left.eq(1.0).float()
                 mask = mask - lones
 

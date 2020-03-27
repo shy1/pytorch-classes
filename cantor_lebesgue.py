@@ -6,10 +6,18 @@ class Cantor(nn.Module):
     """
     Cantor-Lebesgue By Proxy
     - expects float32 input between 0 and 1
-    - Cantor function part detached from backpropagation and ignored by autograd
-    - gradient_path part contributes only tiny value to output but always gives the input a derivative of 1
+    - Cantor function part detached from gradient backpropagation and ignored by autograd
+
+    - gradient_path part contributes only tiny value to output but always gives the input a derivative of 1, allowing
+    the non-continuously differentiable cantor-lebesgue 'devil's staircase' function to be used as an
+    activation function with a 'proxy' gradient for SGD
+
+    - as the function maps 0 --> 0, 1/2 --> 1/2, and 1 --> 1, using a constant linear derivative of 1 seems okay as that
+    is sort of? the mean derivative of the function even if it is actually 0 everywhere the actual cantor function is
+    differentiable
 
     """
+
     def __init__(self, precision):
         super(Cantor, self).__init__()
         self.precision = int(precision)
@@ -22,8 +30,8 @@ class Cantor(nn.Module):
         self.powersof2 = 2**exps
         self.powersof2 = self.powersof2.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
 
-        # 2 raised to the negative precision power, ex: 2^-15 = 1/32768
-        self.multiplier = torch.FloatTensor([2 ** -precision]).cuda()
+        # 2 raised to the value of negative 'precision', ex: 2^-15 = 1/32768
+        self.pointmover = torch.FloatTensor([2 ** -precision]).cuda()
 
         self.powersof2 = self.powersof2.float().cuda()
         print(self.precision, self.largeconst)
@@ -38,8 +46,8 @@ class Cantor(nn.Module):
             mask = torch.ones_like(cx)
             output = torch.zeros_like(cx).unsqueeze(0).repeat(self.precision, 1, 1, 1)
 
-            # convert 1.00 to 0.00 to make math work using only places to the right of decimal point
-            # output in this case will be 0.00 and the 1. is added back at the end to map 1.00 -> 1.00
+            # convert any 1.00's to 0.00 to make math work using only places to the right of decimal point
+            # output in this case will be 0.00 and the 1. is added back at the end to map 1.00 --> 1.00
             og_ones = torch.floor(cx)
             newx = cx - og_ones
 
@@ -68,7 +76,7 @@ class Cantor(nn.Module):
             output = output.sum(dim=0)
 
             # move decimal place back to correct position to create float
-            output = output.mul(self.multiplier)
+            output = output.mul(self.pointmover)
 
             # add back the 1.0's we took out earlier
             output = output.add(og_ones)
